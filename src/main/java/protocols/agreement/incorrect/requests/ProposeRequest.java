@@ -1,4 +1,4 @@
-package protocols.agreement.requests;
+package protocols.agreement.incorrect.requests;
 
 import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import org.apache.commons.codec.binary.Hex;
