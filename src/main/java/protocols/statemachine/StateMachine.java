@@ -10,11 +10,12 @@ import java.util.Properties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import protocols.agreement.IncorrectAgreement;
-import protocols.agreement.notifications.DecidedNotification;
-import protocols.agreement.notifications.JoinedNotification;
-import protocols.agreement.notifications.LeaderChangeNotification;
-import protocols.agreement.requests.ProposeRequest;
+import protocols.agreement.incorrect.IncorrectAgreement;
+import protocols.agreement.incorrect.notifications.DecidedNotification;
+import protocols.agreement.incorrect.notifications.JoinedNotification;
+import protocols.agreement.incorrect.notifications.LeaderChangeNotification;
+import protocols.agreement.incorrect.requests.ProposeRequest;
+import protocols.agreement.raft.RaftAgreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.statemachine.notifications.ClientRequestReply;
 import protocols.statemachine.requests.OrderRequest;
@@ -57,12 +58,21 @@ public class StateMachine extends GenericProtocol {
     private List<Host> membership;
     private int nextInstance;
 
+    private final short agreementProtoId;
+
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
 
         String address = props.getProperty("babel.address");
         String port = props.getProperty("babel.port");
+
+        String agreementProto = props.getProperty("agreement_proto", "raft");
+        switch (agreementProto) {
+            case "raft":      agreementProtoId = RaftAgreement.PROTOCOL_ID;      break;
+            case "incorrect": agreementProtoId = IncorrectAgreement.PROTOCOL_ID; break;
+            default: throw new AssertionError("Unknown agreement protocol: " + agreementProto);
+        }
 
         logger.info("Listening on {}:{}", address, port);
         this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
@@ -135,7 +145,7 @@ public class StateMachine extends GenericProtocol {
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
-                    IncorrectAgreement.PROTOCOL_ID);
+                    agreementProtoId);
         }
     }
 
