@@ -1,4 +1,4 @@
-package protocols.agreement.requests;
+package protocols.agreement.multipaxos.requests;
 
 import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import pt.unl.fct.di.novasys.network.data.Host;

@@ -10,11 +10,11 @@ import java.util.Properties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import protocols.agreement.IncorrectAgreement;
-import protocols.agreement.notifications.DecidedNotification;
-import protocols.agreement.notifications.JoinedNotification;
-import protocols.agreement.notifications.LeaderChangeNotification;
-import protocols.agreement.requests.ProposeRequest;
+import protocols.agreement.multipaxos.MultipaxosAgreement;
+import protocols.agreement.multipaxos.notifications.DecidedNotification;
+import protocols.agreement.multipaxos.notifications.JoinedNotification;
+import protocols.agreement.multipaxos.notifications.LeaderChangeNotification;
+import protocols.agreement.multipaxos.requests.ProposeRequest;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.statemachine.notifications.ClientRequestReply;
 import protocols.statemachine.requests.OrderRequest;
@@ -135,7 +135,7 @@ public class StateMachine extends GenericProtocol {
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
-                    IncorrectAgreement.PROTOCOL_ID);
+                    MultipaxosAgreement.PROTOCOL_ID);
         }
     }
 
