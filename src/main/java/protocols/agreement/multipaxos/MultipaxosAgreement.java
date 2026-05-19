@@ -184,7 +184,9 @@ public class MultipaxosAgreement extends GenericProtocol {
                     DecideMessage message = new DecideMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot());
                     membership.forEach(h -> sendMessage(message, h));
                     slot_out = Math.max(slot_out, msg.getInstance() + 1);
-                    deserializeAndApplyMembership(msg.getOp());
+                    if(isMembershipOperation(msg.getOp())) {
+                        deserializeAndApplyMembership(msg.getOp());
+                    }
                 }
             }
             //senão, ignoramos
@@ -200,7 +202,9 @@ public class MultipaxosAgreement extends GenericProtocol {
             instance.setAcceptedOperation(msg.getOp());
             instance.setAcceptedBallot(msg.getBallot());
             triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-            deserializeAndApplyMembership(msg.getOp());
+            if(isMembershipOperation(msg.getOp())) {
+                deserializeAndApplyMembership(msg.getOp());
+            }
             slot_out = Math.max(slot_out, msg.getInstance() + 1);
             slot_in = Math.max(slot_in, msg.getInstance() + 1);
         }
@@ -280,10 +284,9 @@ public class MultipaxosAgreement extends GenericProtocol {
     }
 
     private void mergeInstances(Map<Integer, AcceptedValue> values){
-        int maxI=0;
         for(int i : values.keySet()){
             AcceptedValue value = values.get(i);
-            if(i<slot_in){
+            if(i < slot_in){
                 PaxosInstanceState instance = getOrCreateInstance(i);
                 if(instance.getAcceptedBallot()==null || instance.getAcceptedBallot().compareTo(value.getBallot()) < 0){
                     instance.setAcceptedBallot(value.getBallot());
@@ -296,9 +299,9 @@ public class MultipaxosAgreement extends GenericProtocol {
                 PaxosInstanceState instance = new PaxosInstanceState(value.getOpId(), value.getOp(), value.getBallot());
                 instances.put(i, instance);
             }
-            if(i>maxI){ maxI = i; }
+            // Atualiza o slot_in apenas com base nas instâncias reais recebidas
+            slot_in = Math.max(slot_in, i + 1);
         }
-        slot_in = Math.max(slot_in, maxI + 1);
     }
 
     private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
@@ -372,6 +375,13 @@ public class MultipaxosAgreement extends GenericProtocol {
             logger.error("Failed to apply dynamic membership consensus transition step", e);
             throw new RuntimeException(e);
         }
+    }
+
+    private boolean isMembershipOperation(byte[] op) {  //Correção rápida para a função acima funcionar bem (processar apenas as mensagens corretas)
+        if(op == null || op.length < 9) return false;
+
+        byte type = op[0];
+        return type == OP_TYPE_ADD || type == OP_TYPE_REMOVE;
     }
 
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
