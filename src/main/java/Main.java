@@ -1,3 +1,4 @@
+import protocols.agreement.multipaxos.MultipaxosAgreement;
 import protocols.agreement.incorrect.IncorrectAgreement;
 import protocols.agreement.raft.RaftAgreement;
 import pt.unl.fct.di.novasys.babel.core.Babel;
@@ -56,8 +57,7 @@ public class Main {
         // StateMachine Protocol
         StateMachine sm = new StateMachine(props);
         // Agreement Protocol
-//        IncorrectAgreement agreement = new IncorrectAgreement(props);
-//        RaftAgreement agreement = new RaftAgreement(props);
+        MultipaxosAgreement agreement = new MultipaxosAgreement(props);
 
         //Register applications in babel
         babel.registerProtocol(hashApp);

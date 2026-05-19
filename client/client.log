@@ -1,0 +1,2 @@
+2026-05-14 18:59:46:029 0 sec: 0 operations; est completion in 0 second 
+2026-05-14 18:59:49:488 3 sec: 15000 operations; 4305.4 current ops/sec; [READ AverageLatency(us)=1684.35] [CLEANUP AverageLatency(us)=0.67] [UPDATE AverageLatency(us)=1788.06] 

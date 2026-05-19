@@ -3,13 +3,27 @@ package protocols.statemachine;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import protocols.agreement.multipaxos.MultipaxosAgreement;
+import protocols.agreement.multipaxos.notifications.DecidedNotification;
+import protocols.agreement.multipaxos.notifications.JoinedNotification;
+import protocols.agreement.multipaxos.notifications.LeaderChangeNotification;
+import protocols.agreement.multipaxos.requests.ProposeRequest;
+import protocols.agreement.notifications.DecidedNotification;
+import protocols.agreement.notifications.JoinedNotification;
+import protocols.agreement.notifications.LeaderChangeNotification;
+import protocols.agreement.requests.ProposeRequest;
+import protocols.statemachine.messages.ForwardedOpMessage;
 import protocols.agreement.incorrect.IncorrectAgreement;
 import protocols.agreement.incorrect.notifications.DecidedNotification;
 import protocols.agreement.incorrect.notifications.JoinedNotification;
@@ -19,6 +33,7 @@ import protocols.agreement.raft.RaftAgreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.statemachine.notifications.ClientRequestReply;
 import protocols.statemachine.requests.OrderRequest;
+import protocols.statemachine.timers.RetryConnectionTimer;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -56,14 +71,30 @@ public class StateMachine extends GenericProtocol {
 
     private State state;
     private List<Host> membership;
-    private int nextInstance;
+
+    private Host leader; //Current known leader
+    private int nextInstance; // Instance of next propose
+    private int executeInstance; // Instance waiting to be executed
+
+    private short agreementProtocolID;
+
+    private final Map<Integer, DecidedNotification> decidedBuffer; //Orderless decisions, not executed
+    private final Map<UUID, OrderRequest> pendingRequests; //Local requests, not decided
+    private final java.util.Queue<OrderRequest> toProposeQueue;
+    private static final int MAX_WINDOW = 15000; //Maximum active instances
 
     private final short agreementProtoId;
 
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
-
+        executeInstance = 0;
+        decidedBuffer = new HashMap<>();
+        pendingRequests = new LinkedHashMap<>();
+        String agreementIdStr = props.getProperty("agreement_protocol_id");
+        this.agreementProtocolID = Short.parseShort(agreementIdStr);
+        this.toProposeQueue = new LinkedList<>();
+        
         String address = props.getProperty("babel.address");
         String port = props.getProperty("babel.port");
 
@@ -98,6 +129,13 @@ public class StateMachine extends GenericProtocol {
         /*--------------------- Register Notification Handlers ----------------------------- */
         subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
         subscribeNotification(LeaderChangeNotification.NOTIFICATION_ID, this::uponLeaderChangeNotification);
+
+        /*--------------------- Register Notification Handlers ----------------------------- */
+        registerMessageSerializer(channelId, ForwardedOpMessage.MSG_ID, ForwardedOpMessage.serializer);
+        registerMessageHandler(channelId, ForwardedOpMessage.MSG_ID, this::uponForwardedOpMessage, this::uponMsgFail);
+
+        /*--------------------- Register Notification Handlers ----------------------------- */
+        registerTimerHandler(RetryConnectionTimer.TIMER_ID, this::uponRetryConnectionTimer);
     }
 
     @Override
@@ -113,10 +151,10 @@ public class StateMachine extends GenericProtocol {
             Host h;
             try {
                 h = new Host(InetAddress.getByName(hostElements[0]), Integer.parseInt(hostElements[1]));
+                initialMembership.add(h);
             } catch (UnknownHostException e) {
                 throw new AssertionError("Error parsing initial_membership", e);
             }
-            initialMembership.add(h);
         }
 
         if (initialMembership.contains(self)) {
@@ -131,31 +169,63 @@ public class StateMachine extends GenericProtocol {
             logger.info("Starting in JOINING as I am not part of initial membership");
             //You have to do something to join the system and know which instance you joined
             // (and copy the state of that instance)
+            Host contactNode = initialMembership.get(0);
+            membership = new LinkedList<>(initialMembership);
+            openConnection(contactNode);
+            //sendMessage(new JoinRequest(), contactNode);
         }
 
     }
 
     /*--------------------------------- Requests ---------------------------------------- */
+    /*--------------------------------- Requests ---------------------------------------- */
+    /*--------------------------------- Requests ---------------------------------------- */
+
     private void uponOrderRequest(OrderRequest request, short sourceProto) {
         logger.debug("Received request: " + request);
         if (state == State.JOINING) {
             //Do something smart (like buffering the requests)
+            pendingRequests.put(request.getOpId(), request);
+            return;
         } else if (state == State.ACTIVE) {
             //Also do something starter, we don't want an infinite number of instances active
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
+            pendingRequests.put(request.getOpId(), request);
+            if(self.equals(leader)){ // If im the leader i am the one to propose the accord
+                toProposeQueue.add(request);
+                tryPropose();
+            } else if (leader != null){ // If im NOT the leader i resend to the leader.
+                sendMessage(new ForwardedOpMessage(request.getOpId(), request.getOperation()), leader);
+            } 
+            //processRequest(request);
             sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
                     agreementProtoId);
         }
     }
 
     /*--------------------------------- Notifications ---------------------------------------- */
+    /*--------------------------------- Notifications ---------------------------------------- */
+    /*--------------------------------- Notifications ---------------------------------------- */
+
     private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
         logger.debug("Received notification: " + notification);
         //Maybe we should make sure operations are executed in order?
         //You should be careful and check if this operation if an application operation (and send it up)
         //or if this is an operations that was executed by the state machine itself (in which case you should execute)
-        triggerNotification(new ClientRequestReply(notification.getOpId(), notification.getOperation()));
+        decidedBuffer.put(notification.getInstance(), notification);
+
+        if(notification.getInstance() >= nextInstance){
+            nextInstance = notification.getInstance() +1;
+        }
+        
+        while(decidedBuffer.containsKey(executeInstance)){
+            DecidedNotification decided = decidedBuffer.remove(executeInstance);
+            pendingRequests.remove(decided.getOpId());
+            triggerNotification(new ClientRequestReply(decided.getOpId(), decided.getOperation()));
+            executeInstance++;
+        }
+        tryPropose();
     }
     
     private void uponLeaderChangeNotification(LeaderChangeNotification notification, short sourceProto) {
@@ -163,13 +233,77 @@ public class StateMachine extends GenericProtocol {
     	//This is the notification that indicates a leader change in the agreement protocol. You must
     	//do the necessary steps to react to this change, which at minimum involves redirecting pending
     	//client requests to the new leader (notice that you might be the leader)
+
+        this.leader = notification.getLeaderID();
+        if (leader == null) return; // No leader was selected..
+
+        if(self.equals(leader)){
+           logger.info("I AM THE LEADER!!"); 
+           if (nextInstance < executeInstance){
+                nextInstance = executeInstance;
+           }
+           // Time to propose everything :)
+           toProposeQueue.clear();
+           toProposeQueue.addAll(pendingRequests.values());
+           tryPropose();
+        } else {
+            // Another node is the leader.. send every pending to it!
+            for (OrderRequest req: pendingRequests.values()) {
+                sendMessage(new ForwardedOpMessage(req.getOpId(), req.getOperation()), leader);
+            }
+        }
     }
 
     /*--------------------------------- Messages ---------------------------------------- */
+    /*--------------------------------- Messages ---------------------------------------- */
+    /*--------------------------------- Messages ---------------------------------------- */
+
+    private void processRequest(OrderRequest request){
+        if (self.equals(leader)){ // If im the leader i am the one to propose the accord
+            sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), this.agreementProtocolID);
+        } else if (leader != null) { // If im NOT the leader i resend to the leader.
+            sendMessage(new ForwardedOpMessage(request.getOpId(), request.getOperation()), leader);
+        } else {
+            logger.warn("Request without known leader, sent into buffer.");
+        }
+    }
+
+    private void tryPropose(){
+        while(self.equals(leader) && !toProposeQueue.isEmpty() && (nextInstance - executeInstance) < MAX_WINDOW){
+            OrderRequest req = toProposeQueue.poll(); 
+            sendRequest(new ProposeRequest(nextInstance++, req.getOpId(), req.getOperation()), this.agreementProtocolID);
+        }
+    }
+    
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
         //If a message fails to be sent, for whatever reason, log the message and the reason
         logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
     }
+
+    private void uponForwardedOpMessage(ForwardedOpMessage msg, Host from, short sourceProto, int channelId) {
+        if (state == State.ACTIVE) {
+            OrderRequest request = new OrderRequest(msg.getOpId(), msg.getOperation());
+
+        if(!pendingRequests.containsKey(request.getOpId())){
+            pendingRequests.put(request.getOpId(), request);
+
+            if(self.equals(leader)){
+                toProposeQueue.add(request);
+                tryPropose();
+            }
+            //processRequest(request);
+        }
+        }
+    }
+
+    /*--------------------------------- Timers ---------------------------------------- */
+    
+    private void uponRetryConnectionTimer(RetryConnectionTimer timer, long timerId){
+        if(membership.contains(timer.getTarget())){
+            logger.debug("Retrying connection to {}", timer.getTarget());
+            openConnection(timer.getTarget());
+        }
+    }                  
 
     /* --------------------------------- TCPChannel Events ---------------------------- */
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
@@ -184,8 +318,9 @@ public class StateMachine extends GenericProtocol {
         logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
         //Maybe we don't want to do this forever. At some point we assume he is no longer there.
         //Also, maybe wait a little bit before retrying, or else you'll be trying 1000s of times per second
+        
         if(membership.contains(event.getNode()))
-            openConnection(event.getNode());
+            setupTimer(new RetryConnectionTimer(event.getNode()), 2000);
     }
 
     private void uponInConnectionUp(InConnectionUp event, int channelId) {
@@ -195,5 +330,4 @@ public class StateMachine extends GenericProtocol {
     private void uponInConnectionDown(InConnectionDown event, int channelId) {
         logger.trace("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
     }
-
 }
