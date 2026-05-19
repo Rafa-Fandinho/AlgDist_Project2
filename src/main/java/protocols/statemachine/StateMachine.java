@@ -14,6 +14,11 @@ import java.util.UUID;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import protocols.agreement.multipaxos.MultipaxosAgreement;
+import protocols.agreement.multipaxos.notifications.DecidedNotification;
+import protocols.agreement.multipaxos.notifications.JoinedNotification;
+import protocols.agreement.multipaxos.notifications.LeaderChangeNotification;
+import protocols.agreement.multipaxos.requests.ProposeRequest;
 import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.notifications.LeaderChangeNotification;
