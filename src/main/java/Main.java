@@ -48,6 +48,8 @@ public class Main {
         GenericProtocol agreement;
         if (agreementProto.equals("raft")) {
             agreement = new RaftAgreement(props);
+        } else if (agreementProto.equals("multi-paxos")) {
+            agreement = new MultipaxosAgreement(props);
         } else {
             agreement = new IncorrectAgreement(props);
         }
@@ -56,8 +58,6 @@ public class Main {
         HashApp hashApp = new HashApp(props);
         // StateMachine Protocol
         StateMachine sm = new StateMachine(props);
-        // Agreement Protocol
-        MultipaxosAgreement agreement = new MultipaxosAgreement(props);
 
         //Register applications in babel
         babel.registerProtocol(hashApp);
