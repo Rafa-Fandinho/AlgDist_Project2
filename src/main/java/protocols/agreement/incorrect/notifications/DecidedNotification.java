@@ -1,4 +1,4 @@
-package protocols.agreement.notifications;
+package protocols.agreement.incorrect.notifications;
 
 import java.util.UUID;
 

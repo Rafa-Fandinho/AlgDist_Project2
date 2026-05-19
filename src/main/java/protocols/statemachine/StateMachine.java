@@ -19,6 +19,12 @@ import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.notifications.LeaderChangeNotification;
 import protocols.agreement.requests.ProposeRequest;
 import protocols.statemachine.messages.ForwardedOpMessage;
+import protocols.agreement.incorrect.IncorrectAgreement;
+import protocols.agreement.incorrect.notifications.DecidedNotification;
+import protocols.agreement.incorrect.notifications.JoinedNotification;
+import protocols.agreement.incorrect.notifications.LeaderChangeNotification;
+import protocols.agreement.incorrect.requests.ProposeRequest;
+import protocols.agreement.raft.RaftAgreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.statemachine.notifications.ClientRequestReply;
 import protocols.statemachine.requests.OrderRequest;
@@ -72,6 +78,8 @@ public class StateMachine extends GenericProtocol {
     private final java.util.Queue<OrderRequest> toProposeQueue;
     private static final int MAX_WINDOW = 15000; //Maximum active instances
 
+    private final short agreementProtoId;
+
     public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         nextInstance = 0;
@@ -84,6 +92,13 @@ public class StateMachine extends GenericProtocol {
         
         String address = props.getProperty("babel.address");
         String port = props.getProperty("babel.port");
+
+        String agreementProto = props.getProperty("agreement_proto", "raft");
+        switch (agreementProto) {
+            case "raft":      agreementProtoId = RaftAgreement.PROTOCOL_ID;      break;
+            case "incorrect": agreementProtoId = IncorrectAgreement.PROTOCOL_ID; break;
+            default: throw new AssertionError("Unknown agreement protocol: " + agreementProto);
+        }
 
         logger.info("Listening on {}:{}", address, port);
         this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
@@ -179,6 +194,8 @@ public class StateMachine extends GenericProtocol {
                 sendMessage(new ForwardedOpMessage(request.getOpId(), request.getOperation()), leader);
             } 
             //processRequest(request);
+            sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
+                    agreementProtoId);
         }
     }
 

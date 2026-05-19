@@ -1,4 +1,4 @@
-package protocols.agreement.messages;
+package protocols.agreement.incorrect.messages;
 
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.codec.binary.Hex;

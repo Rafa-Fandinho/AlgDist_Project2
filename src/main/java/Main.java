@@ -1,9 +1,11 @@
+import protocols.agreement.incorrect.IncorrectAgreement;
+import protocols.agreement.raft.RaftAgreement;
 import pt.unl.fct.di.novasys.babel.core.Babel;
+import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import utils.InterfaceToIp;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import protocols.agreement.IncorrectAgreement;
 import protocols.app.HashApp;
 import protocols.statemachine.StateMachine;
 
@@ -41,12 +43,21 @@ public class Main {
         	System.exit(1);
         }
 
+        String agreementProto = props.getProperty("agreement_proto", "raft");
+        GenericProtocol agreement;
+        if (agreementProto.equals("raft")) {
+            agreement = new RaftAgreement(props);
+        } else {
+            agreement = new IncorrectAgreement(props);
+        }
+
         // Application
         HashApp hashApp = new HashApp(props);
         // StateMachine Protocol
         StateMachine sm = new StateMachine(props);
         // Agreement Protocol
-        IncorrectAgreement agreement = new IncorrectAgreement(props);
+//        IncorrectAgreement agreement = new IncorrectAgreement(props);
+//        RaftAgreement agreement = new RaftAgreement(props);
 
         //Register applications in babel
         babel.registerProtocol(hashApp);
