@@ -1,5 +1,8 @@
 import protocols.agreement.multipaxos.MultipaxosAgreement;
+import protocols.agreement.incorrect.IncorrectAgreement;
+import protocols.agreement.raft.RaftAgreement;
 import pt.unl.fct.di.novasys.babel.core.Babel;
+import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import utils.InterfaceToIp;
 
 import org.apache.logging.log4j.LogManager;
@@ -39,6 +42,14 @@ public class Main {
         else if(!props.containsKey("babel.address")) {
         	System.err.println("Cannot start process without either babel.interface or babel.address being defined.");
         	System.exit(1);
+        }
+
+        String agreementProto = props.getProperty("agreement_proto", "raft");
+        GenericProtocol agreement;
+        if (agreementProto.equals("raft")) {
+            agreement = new RaftAgreement(props);
+        } else {
+            agreement = new IncorrectAgreement(props);
         }
 
         // Application
