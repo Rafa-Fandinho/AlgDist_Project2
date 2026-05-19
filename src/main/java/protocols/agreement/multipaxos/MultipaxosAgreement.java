@@ -6,12 +6,12 @@ import protocols.agreement.multipaxos.auxiliaryClasses.AcceptedValue;
 import protocols.agreement.multipaxos.auxiliaryClasses.Ballot;
 import protocols.agreement.multipaxos.auxiliaryClasses.PaxosInstanceState;
 import protocols.agreement.multipaxos.messages.*;
-import protocols.agreement.multipaxos.notifications.DecidedNotification;
-import protocols.agreement.multipaxos.notifications.JoinedNotification;
-import protocols.agreement.multipaxos.notifications.LeaderChangeNotification;
-import protocols.agreement.multipaxos.requests.AddReplicaRequest;
-import protocols.agreement.multipaxos.requests.ProposeRequest;
-import protocols.agreement.multipaxos.requests.RemoveReplicaRequest;
+import protocols.agreement.notifications.DecidedNotification;
+import protocols.agreement.notifications.JoinedNotification;
+import protocols.agreement.notifications.LeaderChangeNotification;
+import protocols.agreement.requests.AddReplicaRequest;
+import protocols.agreement.requests.ProposeRequest;
+import protocols.agreement.requests.RemoveReplicaRequest;
 import protocols.agreement.multipaxos.timers.LeaderTimer;
 import protocols.agreement.multipaxos.timers.SuspectTimer;
 import protocols.statemachine.notifications.ChannelReadyNotification;
@@ -27,7 +27,7 @@ public class MultipaxosAgreement extends GenericProtocol {
     private static final Logger logger = LogManager.getLogger(MultipaxosAgreement.class);
 
     //Protocol information, to register in babel
-    public final static short PROTOCOL_ID = 100;
+    public final static short PROTOCOL_ID = 101;
     public final static String PROTOCOL_NAME = "Multi-Paxos Agreement";
 
     public static final byte OP_TYPE_ADD = 0x01;

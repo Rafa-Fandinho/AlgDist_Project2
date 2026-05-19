@@ -1,21 +1,20 @@
-package protocols.agreement.incorrect.notifications;
+package protocols.agreement.requests;
+
+import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
+import org.apache.commons.codec.binary.Hex;
 
 import java.util.UUID;
 
-import org.apache.commons.codec.binary.Hex;
+public class ProposeRequest extends ProtoRequest {
 
-import pt.unl.fct.di.novasys.babel.generic.ProtoNotification;
-
-public class DecidedNotification extends ProtoNotification {
-
-    public static final short NOTIFICATION_ID = 101;
+    public static final short REQUEST_ID = 101;
 
     private final int instance;
     private final UUID opId;
     private final byte[] operation;
 
-    public DecidedNotification(int instance, UUID opId, byte[] operation) {
-        super(NOTIFICATION_ID);
+    public ProposeRequest(int instance, UUID opId, byte[] operation) {
+        super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
         this.operation = operation;
@@ -35,7 +34,7 @@ public class DecidedNotification extends ProtoNotification {
 
     @Override
     public String toString() {
-        return "DecidedNotification{" +
+        return "ProposeRequest{" +
                 "instance=" + instance +
                 ", opId=" + opId +
                 ", operation=" + Hex.encodeHexString(operation) +

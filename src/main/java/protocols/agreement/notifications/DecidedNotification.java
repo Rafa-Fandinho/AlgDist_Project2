@@ -1,4 +1,4 @@
-package protocols.agreement.multipaxos.notifications;
+package protocols.agreement.notifications;
 
 import java.util.UUID;
 

@@ -14,10 +14,11 @@ import java.util.UUID;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import protocols.agreement.multipaxos.notifications.DecidedNotification;
-import protocols.agreement.multipaxos.notifications.JoinedNotification;
-import protocols.agreement.multipaxos.notifications.LeaderChangeNotification;
-import protocols.agreement.multipaxos.requests.ProposeRequest;
+import protocols.agreement.multipaxos.MultipaxosAgreement;
+import protocols.agreement.notifications.DecidedNotification;
+import protocols.agreement.notifications.JoinedNotification;
+import protocols.agreement.notifications.LeaderChangeNotification;
+import protocols.agreement.requests.ProposeRequest;
 import protocols.statemachine.messages.ForwardedOpMessage;
 import protocols.agreement.incorrect.IncorrectAgreement;
 import protocols.agreement.raft.RaftAgreement;
@@ -67,7 +68,6 @@ public class StateMachine extends GenericProtocol {
     private int nextInstance; // Instance of next propose
     private int executeInstance; // Instance waiting to be executed
 
-    private short agreementProtocolID;
 
     private final Map<Integer, DecidedNotification> decidedBuffer; //Orderless decisions, not executed
     private final Map<UUID, OrderRequest> pendingRequests; //Local requests, not decided
@@ -82,8 +82,6 @@ public class StateMachine extends GenericProtocol {
         executeInstance = 0;
         decidedBuffer = new HashMap<>();
         pendingRequests = new LinkedHashMap<>();
-        String agreementIdStr = props.getProperty("agreement_protocol_id");
-        this.agreementProtocolID = Short.parseShort(agreementIdStr);
         this.toProposeQueue = new LinkedList<>();
         
         String address = props.getProperty("babel.address");
@@ -92,6 +90,7 @@ public class StateMachine extends GenericProtocol {
         String agreementProto = props.getProperty("agreement_proto", "raft");
         switch (agreementProto) {
             case "raft":      agreementProtoId = RaftAgreement.PROTOCOL_ID;      break;
+            case "multi-paxos": agreementProtoId = MultipaxosAgreement.PROTOCOL_ID; break;
             case "incorrect": agreementProtoId = IncorrectAgreement.PROTOCOL_ID; break;
             default: throw new AssertionError("Unknown agreement protocol: " + agreementProto);
         }
@@ -251,7 +250,7 @@ public class StateMachine extends GenericProtocol {
 
     private void processRequest(OrderRequest request){
         if (self.equals(leader)){ // If im the leader i am the one to propose the accord
-            sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), this.agreementProtocolID);
+            sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), agreementProtoId);
         } else if (leader != null) { // If im NOT the leader i resend to the leader.
             sendMessage(new ForwardedOpMessage(request.getOpId(), request.getOperation()), leader);
         } else {
@@ -262,7 +261,7 @@ public class StateMachine extends GenericProtocol {
     private void tryPropose(){
         while(self.equals(leader) && !toProposeQueue.isEmpty() && (nextInstance - executeInstance) < MAX_WINDOW){
             OrderRequest req = toProposeQueue.poll(); 
-            sendRequest(new ProposeRequest(nextInstance++, req.getOpId(), req.getOperation()), this.agreementProtocolID);
+            sendRequest(new ProposeRequest(nextInstance++, req.getOpId(), req.getOperation()), agreementProtoId);
         }
     }
     

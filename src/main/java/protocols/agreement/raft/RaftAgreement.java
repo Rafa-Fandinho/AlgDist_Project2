@@ -1,16 +1,16 @@
 package protocols.agreement.raft;
 
-import protocols.agreement.incorrect.messages.AppendEntriesMessage;
-import protocols.agreement.incorrect.messages.AppendEntriesReply;
-import protocols.agreement.incorrect.messages.RequestVoteMessage;
-import protocols.agreement.incorrect.messages.RequestVoteReply;
-import protocols.agreement.incorrect.notifications.JoinedNotification;
-import protocols.agreement.incorrect.requests.AddReplicaRequest;
-import protocols.agreement.incorrect.requests.RemoveReplicaRequest;
-import protocols.agreement.incorrect.requests.ProposeRequest;
+import protocols.agreement.raft.messages.AppendEntriesMessage;
+import protocols.agreement.raft.messages.AppendEntriesReply;
+import protocols.agreement.raft.messages.RequestVoteMessage;
+import protocols.agreement.raft.messages.RequestVoteReply;
+import protocols.agreement.notifications.JoinedNotification;
+import protocols.agreement.requests.AddReplicaRequest;
+import protocols.agreement.requests.RemoveReplicaRequest;
+import protocols.agreement.requests.ProposeRequest;
 import protocols.statemachine.notifications.ChannelReadyNotification;
-import protocols.agreement.incorrect.notifications.DecidedNotification;
-import protocols.agreement.incorrect.notifications.LeaderChangeNotification;
+import protocols.agreement.notifications.DecidedNotification;
+import protocols.agreement.notifications.LeaderChangeNotification;
 
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;

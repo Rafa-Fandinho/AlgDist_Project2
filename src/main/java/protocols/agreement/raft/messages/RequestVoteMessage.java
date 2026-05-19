@@ -1,4 +1,4 @@
-package protocols.agreement.incorrect.messages;
+package protocols.agreement.raft.messages;
 
 import io.netty.buffer.ByteBuf;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -13,7 +13,7 @@ import java.io.IOException;
  */
 public class RequestVoteMessage extends ProtoMessage {
 
-    public static final short MSG_ID = 201;
+    public static final short MSG_ID = 205;
 
     private final int  term;
     private final Host candidateId;
