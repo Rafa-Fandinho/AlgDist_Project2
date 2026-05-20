@@ -13,13 +13,15 @@ public class PaxosInstanceState {
     private boolean decided;private Set<byte[]> proposedOps;
     private Set<byte[]> decidedOps;
     private Set<Host> acceptOkResponses;
+    private boolean isMembershipOp;
 
-    public PaxosInstanceState(UUID acceptedOpId, byte[] acceptedOperation, Ballot acceptedBallot, boolean decided, Set<Host> acceptOkResponses){
+    public PaxosInstanceState(UUID acceptedOpId, byte[] acceptedOperation, Ballot acceptedBallot, boolean decided, Set<Host> acceptOkResponses, boolean isMembershipOp){
         this.acceptedOpId = acceptedOpId;
         this.acceptedOperation = acceptedOperation;
         this.acceptedBallot = acceptedBallot;
         this.decided = decided;
         this.acceptOkResponses = acceptOkResponses;
+        this.isMembershipOp = isMembershipOp;
     }
 
     public PaxosInstanceState(UUID acceptedOpId, byte[] acceptedOperation, Ballot acceptedBallot){
@@ -28,6 +30,16 @@ public class PaxosInstanceState {
         this.acceptedBallot = acceptedBallot;
         this.decided = false;
         this.acceptOkResponses = new HashSet<>();
+        this.isMembershipOp = false;
+    }
+
+    public PaxosInstanceState(UUID acceptedOpId, byte[] acceptedOperation, Ballot acceptedBallot, boolean isMembershipOp){
+        this.acceptedOpId = acceptedOpId;
+        this.acceptedOperation = acceptedOperation;
+        this.acceptedBallot = acceptedBallot;
+        this.decided = false;
+        this.acceptOkResponses = new HashSet<>();
+        this.isMembershipOp = isMembershipOp;
     }
 
     public UUID getAcceptedOpId() {
@@ -45,6 +57,8 @@ public class PaxosInstanceState {
     public boolean isDecided() {
         return decided;
     }
+
+    public boolean isMembershipOp() { return isMembershipOp; }
 
     public Set<Host> getAcceptOkResponses() {
         return acceptOkResponses;
@@ -73,4 +87,6 @@ public class PaxosInstanceState {
     public void setDecided(boolean decided) {
         this.decided = decided;
     }
+
+    public void setMembershipOp(boolean membershipOp) { isMembershipOp = membershipOp; }
 }

@@ -158,7 +158,8 @@ public class MultipaxosAgreement extends GenericProtocol {
                     instance.setAcceptedOpId(msg.getOpId());
                     instance.setAcceptedOperation(msg.getOp());
                     instance.setAcceptOkResponses(new HashSet<>());
-                    AcceptOkMessage message = new AcceptOkMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot());
+                    instance.setMembershipOp(msg.isMembership());
+                    AcceptOkMessage message = new AcceptOkMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot(), msg.isMembership());
                     sendMessage(message, host);
                     slot_in = Math.max(slot_in, msg.getInstance() + 1);
                 }
@@ -181,12 +182,10 @@ public class MultipaxosAgreement extends GenericProtocol {
                     instance.setAcceptedOperation(msg.getOp());
                     instance.setDecided(true);
                     triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-                    DecideMessage message = new DecideMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot());
+                    DecideMessage message = new DecideMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot(), msg.isMembership());
                     membership.forEach(h -> sendMessage(message, h));
                     slot_out = Math.max(slot_out, msg.getInstance() + 1);
-                    if(isMembershipOperation(msg.getOp())) {
-                        deserializeAndApplyMembership(msg.getOp());
-                    }
+                    if(msg.isMembership()){ deserializeAndApplyMembership(msg.getOp()); }
                 }
             }
             //senão, ignoramos
@@ -201,10 +200,9 @@ public class MultipaxosAgreement extends GenericProtocol {
             instance.setAcceptedOpId(msg.getOpId());
             instance.setAcceptedOperation(msg.getOp());
             instance.setAcceptedBallot(msg.getBallot());
+            instance.setMembershipOp(msg.isMembership());
             triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-            if(isMembershipOperation(msg.getOp())) {
-                deserializeAndApplyMembership(msg.getOp());
-            }
+            if(msg.isMembership()){ deserializeAndApplyMembership(msg.getOp()); }
             slot_out = Math.max(slot_out, msg.getInstance() + 1);
             slot_in = Math.max(slot_in, msg.getInstance() + 1);
         }
@@ -221,7 +219,7 @@ public class MultipaxosAgreement extends GenericProtocol {
                 for (int i = slot_out; i < slot_in; i++) {  //Não há problema se esse bucle não executar, pode ficar a null
                     PaxosInstanceState instance = getOrCreateInstance(i);
                     if (instance != null && instance.getAcceptedBallot() != null) {
-                        AcceptedValue value = new AcceptedValue(instance.getAcceptedBallot(), instance.getAcceptedOpId(), instance.getAcceptedOperation());
+                        AcceptedValue value = new AcceptedValue(instance.getAcceptedBallot(), instance.getAcceptedOpId(), instance.getAcceptedOperation(), instance.isMembershipOp());
                         acceptedInstances.put(i, value);
                     }
                 }
@@ -246,7 +244,7 @@ public class MultipaxosAgreement extends GenericProtocol {
                     for(int i = slot_out; i<slot_in; i++) {
                         PaxosInstanceState instance = getOrCreateInstance(i);
                         if(instance.getAcceptedOperation() != null) {
-                            AcceptMessage message = new AcceptMessage(i, instances.get(i).getAcceptedOpId(), instances.get(i).getAcceptedOperation(), currentBallot);
+                            AcceptMessage message = new AcceptMessage(i, instances.get(i).getAcceptedOpId(), instances.get(i).getAcceptedOperation(), currentBallot, instances.get(i).isMembershipOp());
                             membership.forEach(h -> sendMessage(message, h));
                             instances.get(i).addAcceptOkResponse(myself);
                         }   //maybe we should remove the previous (potentially failed) leader somehow (?)
@@ -262,16 +260,16 @@ public class MultipaxosAgreement extends GenericProtocol {
     private void uponForwardProposalMessage(ForwardProposalMessage msg, Host host, short sourceProto, int channelId){
         logger.debug("Received {} from {}", msg, host);
         if(isLeader && membership.contains(host)){
-            PaxosInstanceState instance = new PaxosInstanceState(msg.getOpId(),msg.getOp(),currentBallot);
+            PaxosInstanceState instance = new PaxosInstanceState(msg.getOpId(),msg.getOp(),currentBallot, msg.isMembership());
             instances.put(slot_in, instance);
-            AcceptMessage message = new AcceptMessage(slot_in, msg.getOpId(), msg.getOp(), currentBallot);
+            AcceptMessage message = new AcceptMessage(slot_in, msg.getOpId(), msg.getOp(), currentBallot, msg.isMembership());
             membership.forEach(h -> sendMessage(message, h));
             instance.addAcceptOkResponse(myself);
             this.lastHeartbeatTime = System.currentTimeMillis();
             slot_in++;
         }
         else{
-            ForwardProposalMessage message = new ForwardProposalMessage(msg.getOpId(), msg.getOp());
+            ForwardProposalMessage message = new ForwardProposalMessage(msg.getOpId(), msg.getOp(), msg.isMembership());
             sendMessage(message, currentLeader);
         }
     }
@@ -293,10 +291,11 @@ public class MultipaxosAgreement extends GenericProtocol {
                     instance.setAcceptedOpId(value.getOpId());
                     instance.setAcceptedOperation(value.getOp());
                     instance.setAcceptOkResponses(new HashSet<>());
+                    instance.setMembershipOp(value.isMembershipOp());
                 }
             }
             else{
-                PaxosInstanceState instance = new PaxosInstanceState(value.getOpId(), value.getOp(), value.getBallot());
+                PaxosInstanceState instance = new PaxosInstanceState(value.getOpId(), value.getOp(), value.getBallot(), value.isMembershipOp());
                 instances.put(i, instance);
             }
             // Atualiza o slot_in apenas com base nas instâncias reais recebidas
@@ -326,14 +325,14 @@ public class MultipaxosAgreement extends GenericProtocol {
         if(isLeader){
             PaxosInstanceState instance = new PaxosInstanceState(request.getOpId(),request.getOperation(),currentBallot);
             instances.put(slot_in, instance);
-            AcceptMessage message = new AcceptMessage(slot_in, request.getOpId(), request.getOperation(), currentBallot);
+            AcceptMessage message = new AcceptMessage(slot_in, request.getOpId(), request.getOperation(), currentBallot, false);
             membership.forEach(h -> sendMessage(message, h));
             instance.addAcceptOkResponse(myself);
             this.lastHeartbeatTime = System.currentTimeMillis();
             slot_in++;
         }
         else{
-            ForwardProposalMessage msg = new ForwardProposalMessage(request.getOpId(), request.getOperation());
+            ForwardProposalMessage msg = new ForwardProposalMessage(request.getOpId(), request.getOperation(), false);
             sendMessage(msg, currentLeader);
         }
     }
@@ -377,22 +376,15 @@ public class MultipaxosAgreement extends GenericProtocol {
         }
     }
 
-    private boolean isMembershipOperation(byte[] op) {  //Correção rápida para a função acima funcionar bem (processar apenas as mensagens corretas)
-        if(op == null || op.length < 9) return false;
-
-        byte type = op[0];
-        return type == OP_TYPE_ADD || type == OP_TYPE_REMOVE;
-    }
-
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
         logger.debug("Received add replica request " + request);
-        ForwardProposalMessage msg = new ForwardProposalMessage(UUID.randomUUID(), serializeMembershipChange(OP_TYPE_ADD, request.getReplica()));
+        ForwardProposalMessage msg = new ForwardProposalMessage(UUID.randomUUID(), serializeMembershipChange(OP_TYPE_ADD, request.getReplica()), true);
         sendMessage(msg, currentLeader);
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
         logger.debug("Received remove replica request " + request);
-        ForwardProposalMessage msg = new ForwardProposalMessage(UUID.randomUUID(), serializeMembershipChange(OP_TYPE_REMOVE, request.getReplica()));
+        ForwardProposalMessage msg = new ForwardProposalMessage(UUID.randomUUID(), serializeMembershipChange(OP_TYPE_REMOVE, request.getReplica()), true);
         sendMessage(msg, currentLeader);
     }
 

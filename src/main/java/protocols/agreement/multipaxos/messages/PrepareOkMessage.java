@@ -58,6 +58,7 @@ public class PrepareOkMessage extends ProtoMessage {
                 out.writeLong(val.getOpId().getLeastSignificantBits());
                 out.writeInt(val.getOp().length);
                 out.writeBytes(val.getOp());
+                out.writeBoolean(val.isMembershipOp());
             }
         }
 
@@ -74,7 +75,8 @@ public class PrepareOkMessage extends ProtoMessage {
                 UUID opId = new UUID(highBytes, lowBytes);
                 byte[] op = new byte[in.readInt()];
                 in.readBytes(op);
-                acceptedInstances.put(instance, new AcceptedValue(ballot, opId, op));
+                boolean isMembership = in.readBoolean();
+                acceptedInstances.put(instance, new AcceptedValue(ballot, opId, op, isMembership));
             }
 
             return new PrepareOkMessage(promised, acceptedInstances);

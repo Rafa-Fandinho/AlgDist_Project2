@@ -6,6 +6,7 @@ public class AcceptedValue {
     private final Ballot ballot;
     private final UUID opId;
     private final byte[] op;
+    private final boolean isMembershipOp;
 
     public Ballot getBallot() {
         return ballot;
@@ -19,9 +20,12 @@ public class AcceptedValue {
         return opId;
     }
 
-    public AcceptedValue(Ballot ballot, UUID opId, byte[] op) {
+    public boolean isMembershipOp() { return isMembershipOp; }
+
+    public AcceptedValue(Ballot ballot, UUID opId, byte[] op, boolean isMO) {
         this.ballot = ballot;
         this.opId = opId;
         this.op = op;
+        this.isMembershipOp = isMO;
     }
 }
