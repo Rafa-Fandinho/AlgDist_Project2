@@ -49,6 +49,7 @@ public class RaftAgreement extends GenericProtocol {
     // Raft Volatile State (Leaders only)
     private Map<Host, Integer> nextIndex;
     private Map<Host, Integer> matchIndex;
+    private Map<Host, Boolean> isSendingToPeer = new HashMap<>();
 
     // Node and Quorum Control
     private Host myself;
@@ -146,31 +147,25 @@ public class RaftAgreement extends GenericProtocol {
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         if (currentRole != Role.LEADER) {
             if (currentLeader != null) {
-                logger.info("I am not the leader. Forwarding proposal for instance {} to leader: {}",
-                        request.getInstance(), currentLeader);
-
-                // Create forwarding message
+                logger.info("I am not the leader. Forwarding proposal to leader: {}", currentLeader);
                 ForwardProposalMsg msg = new ForwardProposalMsg(
                         request.getInstance(), request.getOpId(), request.getOperation()
                 );
                 sendMessage(msg, currentLeader);
             } else {
-                logger.warn("Rejected ProposeRequest: I am not the leader and there is no known leader currently.");
+                logger.warn("Rejected ProposeRequest: No known leader.");
             }
             return;
         }
 
-        // --- CASE I AM THE LEADER (Your original code) ---
-        int inst = request.getInstance();
+        // DITADURA DO LÍDER: O líder dita o próximo índice sequencial correto
+        lastLogIndex++;
+        int inst = lastLogIndex;
+
         LogEntry entry = new LogEntry(currentTerm, inst, request.getOpId(), request.getOperation());
         log.put(inst, entry);
-        if (inst > lastLogIndex) {
-            lastLogIndex = inst;
-        }
 
-        logger.debug("Leader added entry to log: Instance {}, Term {}", inst, currentTerm);
-
-        // Immediately replicate new entry to followers
+        logger.debug("Leader logged local entry: Instance {}, Term {}", inst, currentTerm);
         for (Host peer : membership) {
             if (!peer.equals(myself)) {
                 sendAppendEntriesToPeer(peer);
@@ -180,20 +175,18 @@ public class RaftAgreement extends GenericProtocol {
 
     private void uponForwardProposalMsg(ForwardProposalMsg msg, Host from, short sourceProto, int channelId) {
         if (currentRole != Role.LEADER) {
-            logger.warn("Received a forwarded proposal from {}, but I am no longer the leader! Discarding...", from);
+            logger.warn("Received a forwarded proposal from {}, but I am no longer leader! Discarding...", from);
             return;
         }
 
-        int inst = msg.getInstance();
+        // DITADURA DO LÍDER: Mantém a consistência também para mensagens reencaminhadas
+        lastLogIndex++;
+        int inst = lastLogIndex;
+
         LogEntry entry = new LogEntry(currentTerm, inst, msg.getOpId(), msg.getOperation());
         log.put(inst, entry);
-        if (inst > lastLogIndex) {
-            lastLogIndex = inst;
-        }
 
-        logger.info("Leader received forwarded proposal from {}: Instance {}, Term {}", from, inst, currentTerm);
-
-        // Replicate to everyone
+        logger.info("Leader logged forwarded entry from {}: Instance {}, Term {}", from, inst, currentTerm);
         for (Host peer : membership) {
             if (!peer.equals(myself)) {
                 sendAppendEntriesToPeer(peer);
@@ -280,6 +273,10 @@ public class RaftAgreement extends GenericProtocol {
     }
 
     private void sendAppendEntriesToPeer(Host peer) {
+        if (isSendingToPeer.getOrDefault(peer, false)) {
+            return;
+        }
+
         int nIndex = nextIndex.getOrDefault(peer, lastLogIndex + 1);
         int prevLogIndex = nIndex - 1;
         int prevLogTerm = (prevLogIndex >= 0 && log.containsKey(prevLogIndex)) ? log.get(prevLogIndex).getTerm() : 0;
@@ -288,6 +285,8 @@ public class RaftAgreement extends GenericProtocol {
         for (int i = nIndex; i <= lastLogIndex; i++) {
             if (log.containsKey(i)) entriesToSend.add(log.get(i));
         }
+
+        isSendingToPeer.put(peer, true);
 
         AppendEntriesMsg msg = new AppendEntriesMsg(currentTerm, myself, prevLogIndex, prevLogTerm, commitIndex, entriesToSend);
         sendMessage(msg, peer);
@@ -411,11 +410,17 @@ public class RaftAgreement extends GenericProtocol {
         }
 
         if (currentRole == Role.LEADER && msg.getTerm() == currentTerm) {
+            isSendingToPeer.put(host, false);
+
             if (msg.isSuccess()) {
                 if (msg.getMatchIndex() > matchIndex.getOrDefault(host, -1)) {
                     matchIndex.put(host, msg.getMatchIndex());
                     nextIndex.put(host, msg.getMatchIndex() + 1);
                     checkAndUpdateCommitIndex();
+                }
+
+                if (lastLogIndex >= nextIndex.get(host)) {
+                    sendAppendEntriesToPeer(host);
                 }
             } else {
                 // Synchronization failed: decrement replication pointer and retry
