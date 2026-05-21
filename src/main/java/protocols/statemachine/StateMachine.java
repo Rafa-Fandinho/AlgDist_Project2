@@ -72,7 +72,7 @@ public class StateMachine extends GenericProtocol {
     private final Map<Integer, DecidedNotification> decidedBuffer; //Orderless decisions, not executed
     private final Map<UUID, OrderRequest> pendingRequests; //Local requests, not decided
     private final java.util.Queue<OrderRequest> toProposeQueue;
-    private static final int MAX_WINDOW = 1000; //Maximum active instances
+    private static final int MAX_WINDOW = 400; //Maximum active instances
 
     private final short agreementProtoId;
 
@@ -182,14 +182,8 @@ public class StateMachine extends GenericProtocol {
         	//Maybe you should modify what is it that you are proposing so that you remember that this
         	//operation was issued by the application (and not an internal operation, check the uponDecidedNotification)
             pendingRequests.put(request.getOpId(), request);
-            if(self.equals(leader)){ // If im the leader i am the one to propose the accord
-                toProposeQueue.add(request);
-                tryPropose();
-            } else if (leader != null){ // If im NOT the leader i resend to the leader.
-                sendMessage(new ForwardedOpMessage(request.getOpId(), request.getOperation()), leader);
-            } 
-            //processRequest(request);
-            // sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), agreementProtoId);
+            toProposeQueue.add(request);
+            tryPropose();
         }
     }
 
@@ -240,9 +234,8 @@ public class StateMachine extends GenericProtocol {
             // Another node is the leader.. send every pending to it!
             logger.info("I am a follower..");
             toProposeQueue.clear();
-            for (OrderRequest req: pendingRequests.values()) {
-                sendMessage(new ForwardedOpMessage(req.getOpId(), req.getOperation()), leader);
-            }
+            toProposeQueue.addAll(pendingRequests.values());
+            tryPropose();
         }
     }
 
@@ -251,13 +244,19 @@ public class StateMachine extends GenericProtocol {
     /*--------------------------------- Messages ---------------------------------------- */
 
     private void tryPropose(){
-        while(self.equals(leader) && !toProposeQueue.isEmpty() && (nextInstance - executeInstance) < MAX_WINDOW){
+        int inFlight = pendingRequests.size() - toProposeQueue.size(); //How many messages are in flight
+        while(!toProposeQueue.isEmpty() && inFlight < MAX_WINDOW){
             OrderRequest req = toProposeQueue.poll(); 
-            sendRequest(new ProposeRequest(nextInstance, req.getOpId(), req.getOperation()), agreementProtoId);
-            nextInstance++;
+            if (self.equals(leader)) { // If im the leader i am the one to propose the accord
+                sendRequest(new ProposeRequest(nextInstance, req.getOpId(), req.getOperation()), agreementProtoId);
+                nextInstance++;
+            } else if (leader != null) { // If im NOT the leader i resend to the leader.
+                sendMessage(new ForwardedOpMessage(req.getOpId(), req.getOperation()), leader);
+            }
+            inFlight++;
         }
     }
-    
+
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
         //If a message fails to be sent, for whatever reason, log the message and the reason
         logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
@@ -274,7 +273,6 @@ public class StateMachine extends GenericProtocol {
                 toProposeQueue.add(request);
                 tryPropose();
             }
-            //processRequest(request);
         }
         }
     }
