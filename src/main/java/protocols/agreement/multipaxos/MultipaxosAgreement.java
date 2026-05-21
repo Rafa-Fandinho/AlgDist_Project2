@@ -114,13 +114,15 @@ public class MultipaxosAgreement extends GenericProtocol {
     }
 
     private void uponLeaderTimer(LeaderTimer timer, long timerId){
-        logger.debug("Leader Time: instance {}", slot_out);
-        HeartbeatMessage message = new HeartbeatMessage(-1);
-        membership.forEach(h -> {
-            if (!h.equals(myself))
-                sendMessage(message, h);
-        });
-        lastHeartbeatTime = System.currentTimeMillis();
+        if(isLeader) {
+            logger.debug("Leader Time: instance {}", slot_out);
+            HeartbeatMessage message = new HeartbeatMessage(-1);
+            membership.forEach(h -> {
+                if (!h.equals(myself))
+                    sendMessage(message, h);
+            });
+            lastHeartbeatTime = System.currentTimeMillis();
+        }
     }
 
     private void uponSuspectTimer(SuspectTimer timer, long timerId){    //TODO: check if it's ok to just hardcode the time
@@ -290,7 +292,10 @@ public class MultipaxosAgreement extends GenericProtocol {
     private void uponHeartbeatMessage(HeartbeatMessage msg, Host host, short sourceProto, int channelId){
         if(membership.contains(host)) {
             this.lastHeartbeatTime = System.currentTimeMillis();
-            currentLeader = host;
+            if (currentLeader == null || !currentLeader.equals(host)) {
+                currentLeader = host;
+                triggerNotification(new LeaderChangeNotification(host));
+            }
         }
     }
 
