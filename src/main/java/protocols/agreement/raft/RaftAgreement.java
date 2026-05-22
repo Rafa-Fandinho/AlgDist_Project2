@@ -166,11 +166,13 @@ public class RaftAgreement extends GenericProtocol {
         log.put(inst, entry);
 
         logger.debug("Leader logged local entry: Instance {}, Term {}", inst, currentTerm);
+        /*
         for (Host peer : membership) {
             if (!peer.equals(myself)) {
                 sendAppendEntriesToPeer(peer);
             }
         }
+        */
     }
 
     private void uponForwardProposalMsg(ForwardProposalMsg msg, Host from, short sourceProto, int channelId) {
@@ -272,7 +274,7 @@ public class RaftAgreement extends GenericProtocol {
         startHeartbeatTimer();
     }
 
-    private void sendAppendEntriesToPeer(Host peer) {
+    private void    sendAppendEntriesToPeer(Host peer) {
         if (isSendingToPeer.getOrDefault(peer, false)) {
             return;
         }
@@ -282,7 +284,9 @@ public class RaftAgreement extends GenericProtocol {
         int prevLogTerm = (prevLogIndex >= 0 && log.containsKey(prevLogIndex)) ? log.get(prevLogIndex).getTerm() : 0;
 
         List<LogEntry> entriesToSend = new ArrayList<>();
-        for (int i = nIndex; i <= lastLogIndex; i++) {
+        int MAX_BATCH_SIZE = 100;
+        
+        for (int i = nIndex; i <= lastLogIndex && entriesToSend.size() < MAX_BATCH_SIZE; i++) {
             if (log.containsKey(i)) entriesToSend.add(log.get(i));
         }
 
@@ -445,9 +449,26 @@ public class RaftAgreement extends GenericProtocol {
     private void uponHeartbeatTimeout(HeartbeatTimer timer, long timerId) {
         if (currentRole == Role.LEADER) {
             for (Host peer : membership) {
-                if (!peer.equals(myself)) sendAppendEntriesToPeer(peer);
+                if (!peer.equals(myself)) {
+                    if (isSendingToPeer.getOrDefault(peer, false)) {
+                        // if channel is occupied, we send an empty heartbeat.
+                        sendEmptyHeartbeat(peer);
+                    } else {
+                        // if not, we also try to send pending data!
+                        sendAppendEntriesToPeer(peer);
+                    }
+                }
             }
         }
+    }
+
+    private void sendEmptyHeartbeat(Host peer) {
+        int nIndex = nextIndex.getOrDefault(peer, lastLogIndex + 1);
+        int prevLogIndex = nIndex - 1;
+        int prevLogTerm = (prevLogIndex >= 0 && log.containsKey(prevLogIndex)) ? log.get(prevLogIndex).getTerm() : 0;
+
+        AppendEntriesMsg msg = new AppendEntriesMsg(currentTerm, myself, prevLogIndex, prevLogTerm, commitIndex, new ArrayList<>());
+        sendMessage(msg , peer);
     }
 
     private void resetElectionTimer() {

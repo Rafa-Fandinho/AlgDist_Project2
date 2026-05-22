@@ -1,3 +1,10 @@
-2026-05-22 19:29:03:945 0 sec: 0 operations; est completion in 0 second 
-2026-05-22 19:29:08:918 5 sec: 22241 operations; 4448.2 current ops/sec; est completion in 1 minute [READ AverageLatency(us)=1145.67] [UPDATE AverageLatency(us)=1209.76] 
-2026-05-22 19:29:13:921 10 sec: 47712 operations; 5090.13 current ops/sec; est completion in 53 seconds [READ AverageLatency(us)=1136.19] [UPDATE AverageLatency(us)=1220.76] 
+2026-05-22 21:27:27:110 0 sec: 0 operations; est completion in 0 second 
+2026-05-22 21:27:32:060 5 sec: 11048 operations; 2204.75 current ops/sec; est completion in 2 minutes [READ AverageLatency(us)=182685.2] [UPDATE AverageLatency(us)=183348.53] 
+2026-05-22 21:27:37:071 10 sec: 42707 operations; 6316.64 current ops/sec; est completion in 1 minute [READ AverageLatency(us)=78814.56] [UPDATE AverageLatency(us)=79048.78] 
+2026-05-22 21:27:42:058 15 sec: 88983 operations; 9281.19 current ops/sec; est completion in 36 seconds [READ AverageLatency(us)=54591.6] [UPDATE AverageLatency(us)=54628.83] 
+2026-05-22 21:27:47:053 20 sec: 117132 operations; 5634.31 current ops/sec; est completion in 32 seconds [READ AverageLatency(us)=89158.81] [UPDATE AverageLatency(us)=88702.96] 
+2026-05-22 21:27:52:063 25 sec: 155596 operations; 7677.45 current ops/sec; est completion in 24 seconds [READ AverageLatency(us)=64792.95] [UPDATE AverageLatency(us)=65077.87] 
+2026-05-22 21:27:57:055 30 sec: 197535 operations; 8404.61 current ops/sec; est completion in 16 seconds [READ AverageLatency(us)=59833.82] [UPDATE AverageLatency(us)=59691.71] 
+2026-05-22 21:28:02:057 35 sec: 239685 operations; 8423.26 current ops/sec; est completion in 9 second [READ AverageLatency(us)=59083.35] [UPDATE AverageLatency(us)=59081.12] 
+2026-05-22 21:28:07:063 40 sec: 282565 operations; 8565.72 current ops/sec; est completion in 3 second [READ AverageLatency(us)=58613.72] [UPDATE AverageLatency(us)=58476.01] 
+2026-05-22 21:28:11:482 44 sec: 300000 operations; 3945.46 current ops/sec; [READ AverageLatency(us)=54981.12] [CLEANUP AverageLatency(us)=0.16] [UPDATE AverageLatency(us)=56654.51] 
