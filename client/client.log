@@ -1,2 +1,3 @@
-2026-05-14 18:59:46:029 0 sec: 0 operations; est completion in 0 second 
-2026-05-14 18:59:49:488 3 sec: 15000 operations; 4305.4 current ops/sec; [READ AverageLatency(us)=1684.35] [CLEANUP AverageLatency(us)=0.67] [UPDATE AverageLatency(us)=1788.06] 
+2026-05-22 19:29:03:945 0 sec: 0 operations; est completion in 0 second 
+2026-05-22 19:29:08:918 5 sec: 22241 operations; 4448.2 current ops/sec; est completion in 1 minute [READ AverageLatency(us)=1145.67] [UPDATE AverageLatency(us)=1209.76] 
+2026-05-22 19:29:13:921 10 sec: 47712 operations; 5090.13 current ops/sec; est completion in 53 seconds [READ AverageLatency(us)=1136.19] [UPDATE AverageLatency(us)=1220.76] 

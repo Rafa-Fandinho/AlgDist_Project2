@@ -214,6 +214,7 @@ public class StateMachine extends GenericProtocol {
     
     private void uponLeaderChangeNotification(LeaderChangeNotification notification, short sourceProto) {
     	logger.debug("Received notification: " + notification);
+        logger.info("LEADER CHANGE: novo líder é {}, eu sou {}", notification.getLeaderID(), self);
     	//This is the notification that indicates a leader change in the agreement protocol. You must
     	//do the necessary steps to react to this change, which at minimum involves redirecting pending
     	//client requests to the new leader (notice that you might be the leader)
@@ -243,20 +244,17 @@ public class StateMachine extends GenericProtocol {
     /*--------------------------------- Messages ---------------------------------------- */
     /*--------------------------------- Messages ---------------------------------------- */
 
-    private void tryPropose(){
-        int inFlight = pendingRequests.size() - toProposeQueue.size(); //How many messages are in flight
-        while(!toProposeQueue.isEmpty() && inFlight < MAX_WINDOW){
-            OrderRequest req = toProposeQueue.poll(); 
-            if (self.equals(leader)) { // If im the leader i am the one to propose the accord
-                sendRequest(new ProposeRequest(nextInstance, req.getOpId(), req.getOperation()), agreementProtoId);
-                nextInstance++;
-            } else if (leader != null) { // If im NOT the leader i resend to the leader.
-                sendMessage(new ForwardedOpMessage(req.getOpId(), req.getOperation()), leader);
-            }
-            inFlight++;
+private void tryPropose(){
+    while(!toProposeQueue.isEmpty() && (nextInstance - executeInstance) < MAX_WINDOW){
+        OrderRequest req = toProposeQueue.poll();
+        if (self.equals(leader)) {
+            sendRequest(new ProposeRequest(nextInstance, req.getOpId(), req.getOperation()), agreementProtoId);
+            nextInstance++;
+        } else if (leader != null) {
+            sendMessage(new ForwardedOpMessage(req.getOpId(), req.getOperation()), leader);
         }
     }
-
+}
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
         //If a message fails to be sent, for whatever reason, log the message and the reason
         logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);

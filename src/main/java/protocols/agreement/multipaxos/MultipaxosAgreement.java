@@ -46,7 +46,7 @@ public class MultipaxosAgreement extends GenericProtocol {
     private Set<Host> prepareOkResponses;
     private long lastHeartbeatTime;
     private boolean electionInProgress;
-
+    private boolean leaderConfirmed = false; 
 
     public final static String PAR_ACK_TIME = "agreement.heartbeat_timeout";  //TODO: Check if we need this later or hardcoding timers is ok
     public final static String PAR_DEFAULT_ACK_TIME = "5000"; //1 seconds
@@ -149,30 +149,36 @@ public class MultipaxosAgreement extends GenericProtocol {
                 k -> new PaxosInstanceState(null, null, null));
     }
 
-    private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId){
+    private void uponAcceptMessage(AcceptMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("Received {} from {}", msg, host);
-        //should I do anything to reschedule it now?
-        if(msg.getOp() != null && membership.contains(host)){
-            if(joinedInstance >= 0 ){
-                if(msg.getBallot().compareTo(promisedBallot)>=0){
-                    electionInProgress = false; //Temos efetivamente um líder
+        if (msg.getOp() != null && membership.contains(host)) {
+            if (joinedInstance >= 0) {
+                if (msg.getBallot().compareTo(promisedBallot) >= 0) {
+                    electionInProgress = false;
                     lastHeartbeatTime = System.currentTimeMillis();
-                    promisedBallot = msg.getBallot(); //O mais provável é ser o mesmo, mas podemos não ter recebido o prepare antes
-                    this.currentLeader = host;
+                    promisedBallot = msg.getBallot();
+
+                    if (!leaderConfirmed || !currentLeader.equals(host)) {
+                        currentLeader = host;
+                        leaderConfirmed = true;
+                        triggerNotification(new LeaderChangeNotification(host));
+                    }
+
                     PaxosInstanceState instance = getOrCreateInstance(msg.getInstance());
                     instance.setAcceptedBallot(msg.getBallot());
                     instance.setAcceptedOpId(msg.getOpId());
                     instance.setAcceptedOperation(msg.getOp());
                     instance.setAcceptOkResponses(new HashSet<>());
                     instance.setMembershipOp(msg.isMembership());
-                    AcceptOkMessage message = new AcceptOkMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot(), msg.isMembership());
+                    AcceptOkMessage message = new AcceptOkMessage(msg.getInstance(), msg.getOpId(), msg.getOp(),
+                            msg.getBallot(), msg.isMembership());
                     sendMessage(message, host);
                     slot_in = Math.max(slot_in, msg.getInstance() + 1);
                 }
             }
         }
     }
-
+    
     private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId){
         logger.debug("Received {} from {}", msg, host);
         if(joinedInstance >= 0 && membership.contains(host)) {
@@ -259,8 +265,14 @@ public class MultipaxosAgreement extends GenericProtocol {
                                     sendMessage(message, h);
                             });
                             instances.get(i).addAcceptOkResponse(myself);
-                        }   //maybe we should remove the previous (potentially failed) leader somehow (?)
+                        } // maybe we should remove the previous (potentially failed) leader somehow (?)
                     }
+
+                    HeartbeatMessage hb = new HeartbeatMessage(-1);
+                    membership.forEach(h -> {
+                        if (!h.equals(myself))
+                            sendMessage(hb, h);
+                    });
                     this.lastHeartbeatTime = System.currentTimeMillis();
                     prepareOkResponses.clear();
                 }
@@ -289,11 +301,12 @@ public class MultipaxosAgreement extends GenericProtocol {
         }
     }
 
-    private void uponHeartbeatMessage(HeartbeatMessage msg, Host host, short sourceProto, int channelId){
-        if(membership.contains(host)) {
+    private void uponHeartbeatMessage(HeartbeatMessage msg, Host host, short sourceProto, int channelId) {
+        if (membership.contains(host)) {
             this.lastHeartbeatTime = System.currentTimeMillis();
-            if (currentLeader == null || !currentLeader.equals(host)) {
+            if (!leaderConfirmed || !currentLeader.equals(host)) {
                 currentLeader = host;
+                leaderConfirmed = true;
                 triggerNotification(new LeaderChangeNotification(host));
             }
         }
@@ -333,7 +346,9 @@ public class MultipaxosAgreement extends GenericProtocol {
         setupPeriodicTimer(new LeaderTimer(), heartbeatTimeout, heartbeatTimeout);
         setupPeriodicTimer(new SuspectTimer(), 2L * heartbeatTimeout, 2L * heartbeatTimeout);
         if(!notification.getMembership().isEmpty()) {
-            this.currentLeader = notification.getMembership().get(0); //Pode não ser o líder correto, basta alguém na cadeia conhecer o líder e reenviar. Senão, perdemos alguma request, mas pode ser reenviada.
+            //this.currentLeader = notification.getMembership().get(0); //Pode não ser o líder correto, basta alguém na cadeia conhecer o líder e reenviar. Senão, perdemos alguma request, mas pode ser reenviada.
+            this.currentLeader = null;
+            this.leaderConfirmed = false;
         }
     }
 
