@@ -65,8 +65,8 @@ public class RaftAgreement extends GenericProtocol {
     public RaftAgreement(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
 
-        this.electionTimeoutMin = Integer.parseInt(props.getProperty("raft.election.timeout.min", "300"));
-        this.electionTimeoutMax = Integer.parseInt(props.getProperty("raft.election.timeout.max", "600"));
+        this.electionTimeoutMin = Integer.parseInt(props.getProperty("raft.election.timeout.min", "500"));
+        this.electionTimeoutMax = Integer.parseInt(props.getProperty("raft.election.timeout.max", "1500"));
         this.heartbeatInterval = Integer.parseInt(props.getProperty("raft.heartbeat.interval", "50"));
 
         logger.info("Raft configured with Election Timeout [{}ms, {}ms] and Heartbeat [{}ms]",
@@ -166,13 +166,13 @@ public class RaftAgreement extends GenericProtocol {
         log.put(inst, entry);
 
         logger.debug("Leader logged local entry: Instance {}, Term {}", inst, currentTerm);
-        /*
         for (Host peer : membership) {
             if (!peer.equals(myself)) {
-                sendAppendEntriesToPeer(peer);
+                if (!isSendingToPeer.getOrDefault(peer, false)) {
+                    sendAppendEntriesToPeer(peer);
+                }
             }
         }
-        */
     }
 
     private void uponForwardProposalMsg(ForwardProposalMsg msg, Host from, short sourceProto, int channelId) {
@@ -191,7 +191,8 @@ public class RaftAgreement extends GenericProtocol {
         logger.info("Leader logged forwarded entry from {}: Instance {}, Term {}", from, inst, currentTerm);
         for (Host peer : membership) {
             if (!peer.equals(myself)) {
-                sendAppendEntriesToPeer(peer);
+                if (!isSendingToPeer.getOrDefault(peer, false))
+                    sendAppendEntriesToPeer(peer);
             }
         }
     }
@@ -206,7 +207,7 @@ public class RaftAgreement extends GenericProtocol {
 
     private void checkAndUpdateCommitIndex() {
         // Find the highest N such that N > commitIndex and the majority has replicated up to N
-        for (int N = lastLogIndex; N > commitIndex; N--) {
+        for (int N = commitIndex + 1; N <= lastLogIndex; N++) {
             if (log.containsKey(N) && log.get(N).getTerm() == currentTerm) {
                 int replicasWithEntry = 1; // Count the leader itself
                 for (Host peer : membership) {
@@ -217,6 +218,9 @@ public class RaftAgreement extends GenericProtocol {
                 if (replicasWithEntry > membership.size() / 2) {
                     commitIndex = N;
                     applyLogEntries();
+                } else {
+                    // Log quando não consegue avançar
+                    logger.warn("Cannot commit N={}, matchIndex={}", N, matchIndex);
                     break;
                 }
             }
@@ -228,7 +232,7 @@ public class RaftAgreement extends GenericProtocol {
             lastApplied++;
             LogEntry entry = log.get(lastApplied);
             if (entry != null) {
-                logger.info("Raft sending stable decision to SMR: Instance {}", lastApplied);
+                logger.debug("Applying instance {}, commitIndex={}", lastApplied, commitIndex);
                 triggerNotification(new DecidedNotification(lastApplied, entry.getOpId(), entry.getOperation()));
             }
         }
@@ -360,7 +364,7 @@ public class RaftAgreement extends GenericProtocol {
         }
 
         boolean success = false;
-        int lastLogIndexState = msg.getPrevLogIndex();
+        int lastLogIndexState = lastLogIndex;
 
         if (msg.getTerm() == currentTerm) {
             if (currentRole == Role.CANDIDATE) currentRole = Role.FOLLOWER;
@@ -376,11 +380,9 @@ public class RaftAgreement extends GenericProtocol {
                     idx = entry.getIndex();
                     // Detect and resolve inconsistencies by cleaning orphan entries
                     if (log.containsKey(idx) && log.get(idx).getTerm() != entry.getTerm()) {
-                        List<Integer> keysToRemove = new ArrayList<>();
-                        for (int k : log.keySet()) {
-                            if (k >= idx) keysToRemove.add(k);
+                        for (int k = idx; k <= lastLogIndex; k++) {
+                            log.remove(k);
                         }
-                        for (int k : keysToRemove) log.remove(k);
                     }
                     if (!log.containsKey(idx)) {
                         log.put(idx, entry);
@@ -423,13 +425,18 @@ public class RaftAgreement extends GenericProtocol {
                     checkAndUpdateCommitIndex();
                 }
 
-                if (lastLogIndex >= nextIndex.get(host)) {
+                if (lastLogIndex >= nextIndex.getOrDefault(host, 0)) {
                     sendAppendEntriesToPeer(host);
                 }
             } else {
                 // Synchronization failed: decrement replication pointer and retry
-                int currentNext = nextIndex.getOrDefault(host, 0);
-                nextIndex.put(host, Math.max(0, currentNext - 1));
+                int reportedMatch = msg.getMatchIndex();
+                if (reportedMatch >= 0) {
+                    nextIndex.put(host, reportedMatch + 1);
+                } else {
+                    int currentNext = nextIndex.getOrDefault(host, 0);
+                    nextIndex.put(host, Math.max(0, currentNext - 1));
+                }
                 sendAppendEntriesToPeer(host);
             }
         }
@@ -450,26 +457,13 @@ public class RaftAgreement extends GenericProtocol {
         if (currentRole == Role.LEADER) {
             for (Host peer : membership) {
                 if (!peer.equals(myself)) {
-                    if (isSendingToPeer.getOrDefault(peer, false)) {
-                        // if channel is occupied, we send an empty heartbeat.
-                        sendEmptyHeartbeat(peer);
-                    } else {
-                        // if not, we also try to send pending data!
-                        sendAppendEntriesToPeer(peer);
-                    }
+                    isSendingToPeer.put(peer, false);
+                    sendAppendEntriesToPeer(peer);
                 }
             }
         }
     }
 
-    private void sendEmptyHeartbeat(Host peer) {
-        int nIndex = nextIndex.getOrDefault(peer, lastLogIndex + 1);
-        int prevLogIndex = nIndex - 1;
-        int prevLogTerm = (prevLogIndex >= 0 && log.containsKey(prevLogIndex)) ? log.get(prevLogIndex).getTerm() : 0;
-
-        AppendEntriesMsg msg = new AppendEntriesMsg(currentTerm, myself, prevLogIndex, prevLogTerm, commitIndex, new ArrayList<>());
-        sendMessage(msg , peer);
-    }
 
     private void resetElectionTimer() {
         if (electionTimerId != -1) cancelTimer(electionTimerId);

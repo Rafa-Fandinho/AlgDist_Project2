@@ -47,9 +47,10 @@ public class MultipaxosAgreement extends GenericProtocol {
     private long lastHeartbeatTime;
     private boolean electionInProgress;
     private boolean leaderConfirmed = false; 
+    private final Queue<ProposeRequest> pendingProposals = new LinkedList<>();
 
     public final static String PAR_ACK_TIME = "agreement.heartbeat_timeout";  //TODO: Check if we need this later or hardcoding timers is ok
-    public final static String PAR_DEFAULT_ACK_TIME = "5000"; //1 seconds
+    public final static String PAR_DEFAULT_ACK_TIME = "500"; //1 seconds
     private final int heartbeatTimeout; //param: timeout for acknowledgement messages*/
 
     public MultipaxosAgreement(Properties props) throws HandlerRegistrationException {
@@ -178,32 +179,40 @@ public class MultipaxosAgreement extends GenericProtocol {
             }
         }
     }
-    
-    private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId){
+
+    private void uponAcceptOkMessage(AcceptOkMessage msg, Host host, short sourceProto, int channelId) {
         logger.debug("Received {} from {}", msg, host);
-        if(joinedInstance >= 0 && membership.contains(host)) {
-            if(currentBallot.compareTo(msg.getBallot())==0) {
+        if (joinedInstance >= 0 && membership.contains(host)) {
+            if (currentBallot.compareTo(msg.getBallot()) == 0) {
                 PaxosInstanceState instance = getOrCreateInstance(msg.getInstance());
                 instance.addAcceptOkResponse(host);
-                if(instance.isDecided()){
+                if (instance.isDecided()) {
                     return;
                 }
-                if (instance.getAcceptOkResponses().size() >= ((membership.size() / 2) + 1)) { //Not sure if this is correct
+                if (instance.getAcceptOkResponses().size() >= ((membership.size() / 2) + 1)) { // Not sure if this is
+                                                                                               // correct
                     instance.setAcceptedBallot(msg.getBallot());
                     instance.setAcceptedOpId(msg.getOpId());
                     instance.setAcceptedOperation(msg.getOp());
                     instance.setDecided(true);
                     triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-                    DecideMessage message = new DecideMessage(msg.getInstance(), msg.getOpId(), msg.getOp(), msg.getBallot(), msg.isMembership());
+                    DecideMessage message = new DecideMessage(msg.getInstance(), msg.getOpId(), msg.getOp(),
+                            msg.getBallot(), msg.isMembership());
                     membership.forEach(h -> {
                         if (!h.equals(myself))
                             sendMessage(message, h);
                     });
                     slot_out = Math.max(slot_out, msg.getInstance() + 1);
-                    if(msg.isMembership()){ deserializeAndApplyMembership(msg.getOp()); }
+                    if (msg.isMembership()) {
+                        deserializeAndApplyMembership(msg.getOp());
+                    }
+                    if (!pendingProposals.isEmpty() && slot_in == slot_out) {
+                        ProposeRequest p = pendingProposals.poll();
+                        uponProposeRequest(p, getProtoId());
+                    }
                 }
             }
-            //senão, ignoramos
+            // senão, ignoramos
         }
     }
 
@@ -230,6 +239,7 @@ public class MultipaxosAgreement extends GenericProtocol {
                 promisedBallot = msg.getBallot();
                 electionInProgress = true; //Esperamos a que um líder seja eleito
                 this.isLeader = false;
+                pendingProposals.clear();
                 Map<Integer, AcceptedValue> acceptedInstances = new HashMap<>();
                 for (int i = slot_out; i < slot_in; i++) {  //Não há problema se esse bucle não executar, pode ficar a null
                     PaxosInstanceState instance = getOrCreateInstance(i);
@@ -284,18 +294,22 @@ public class MultipaxosAgreement extends GenericProtocol {
     private void uponForwardProposalMessage(ForwardProposalMessage msg, Host host, short sourceProto, int channelId){
         logger.debug("Received {} from {}", msg, host);
         if(isLeader && membership.contains(host)){
-            PaxosInstanceState instance = new PaxosInstanceState(msg.getOpId(),msg.getOp(),currentBallot, msg.isMembership());
-            instances.put(slot_in, instance);
-            AcceptMessage message = new AcceptMessage(slot_in, msg.getOpId(), msg.getOp(), currentBallot, msg.isMembership());
-            membership.forEach(h -> {
-                if (!h.equals(myself))
-                    sendMessage(message, h);
-            });
-            instance.addAcceptOkResponse(myself);
-            this.lastHeartbeatTime = System.currentTimeMillis();
-            slot_in++;
-        }
-        else{
+            if(slot_in == slot_out){
+                PaxosInstanceState instance = new PaxosInstanceState(msg.getOpId(), msg.getOp(), currentBallot, msg.isMembership());
+                instances.put(slot_in, instance);
+                AcceptMessage message = new AcceptMessage(slot_in, msg.getOpId(), msg.getOp(), currentBallot, msg.isMembership());
+                membership.forEach(h -> {
+                    if (!h.equals(myself))
+                        sendMessage(message, h);
+                });
+                instance.addAcceptOkResponse(myself);
+                this.lastHeartbeatTime = System.currentTimeMillis();
+                slot_in++;
+            } else {
+                // slot em aberto, guarda como pending (sobrescreve, o SMR vai reenviar os outros)
+                pendingProposals.add(new ProposeRequest(slot_in, msg.getOpId(), msg.getOp()));
+            }
+        } else if(!isLeader && currentLeader != null && !currentLeader.equals(myself)){
             ForwardProposalMessage message = new ForwardProposalMessage(msg.getOpId(), msg.getOp(), msg.isMembership());
             sendMessage(message, currentLeader);
         }
@@ -352,13 +366,14 @@ public class MultipaxosAgreement extends GenericProtocol {
         }
     }
 
-
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received propose request " + request);
-        if(isLeader){
-            PaxosInstanceState instance = new PaxosInstanceState(request.getOpId(),request.getOperation(),currentBallot);
+        if (isLeader) {
+            PaxosInstanceState instance = new PaxosInstanceState(request.getOpId(), request.getOperation(),
+                    currentBallot);
             instances.put(slot_in, instance);
-            AcceptMessage message = new AcceptMessage(slot_in, request.getOpId(), request.getOperation(), currentBallot, false);
+            AcceptMessage message = new AcceptMessage(slot_in, request.getOpId(), request.getOperation(), currentBallot,
+                    false);
             membership.forEach(h -> {
                 if (!h.equals(myself))
                     sendMessage(message, h);
@@ -366,8 +381,9 @@ public class MultipaxosAgreement extends GenericProtocol {
             instance.addAcceptOkResponse(myself);
             this.lastHeartbeatTime = System.currentTimeMillis();
             slot_in++;
-        }
-        else{
+        } else if (isLeader) {
+            pendingProposals.add(request); // slot em aberto, guarda para depois
+        } else {
             ForwardProposalMessage msg = new ForwardProposalMessage(request.getOpId(), request.getOperation(), false);
             sendMessage(msg, currentLeader);
         }

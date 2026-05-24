@@ -126,9 +126,8 @@ def plot_throughput_latency(datasets, outdir):
         
         # Anota o número de threads em alguns pontos
         for x, y, t in zip(xs, ys, threads):
-            if t in (1, 4, 16, 64, 128):
-                ax.annotate(f"{t}t", (x, y), textcoords="offset points",
-                            xytext=(5, 5), fontsize=7, color=color)
+            ax.annotate(f"{t}t", (x, y), textcoords="offset points",
+                        xytext=(5, 5), fontsize=7, color=color)
     
     ax.set_xlabel("Throughput (ops/sec)", fontsize=12)
     ax.set_ylabel("Latência Média (ms)", fontsize=12)

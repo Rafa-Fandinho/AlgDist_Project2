@@ -72,7 +72,7 @@ for t in "${THREADS[@]}"; do
     done
  
     # Pequena pausa entre runs para o sistema estabilizar
-    sleep 3
+    sleep 5
 done
  
 echo ""
