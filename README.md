@@ -8,9 +8,13 @@ Rafael Fandiño 75246
 ## Para executar, utilize os seguintes comandos:
 
 O comando abaixo deve ser feito em terminais diferentes, a quantidade de vezes depende do número de réplicas desejadas.
+
 **java -jar target/DistAlg.jar babel.address=IPx agreement_proto=(raft/multi-paxos) initial_membership=IP1:PORT1,IP2:PORT2,IPX:PORTX**
 
+---
+
 exemplo:
+
 *java -jar target/DistAlg.jar babel.address=127.0.0.1 agreement_proto=raft initial_membership=127.0.0.1:34000,127.0.0.1:34001,127.0.0.1:34002*
 
 ## TESTES:
