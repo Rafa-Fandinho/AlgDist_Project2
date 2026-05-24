@@ -1,19 +1,19 @@
-## Projeto realizado no âmbito da disciplina de Algoritmos Distribuidos FCT NOVA
-Bernardo Ascensão 75153
-Guilherme Ribeiro 75539
-Rafael Fandiño 75246
+## Projeto realizado no âmbito da disciplina de Algoritmos Distribuidos FCT NOVA, MEI
+- Bernardo Ascensão 75153
+- Guilherme Ribeiro 75539
+- Rafael Fandiño 75246
 
 -------------------
 
 ## Para executar, utilize os seguintes comandos:
 
-O comando abaixo deve ser feito em terminais diferentes, a quantidade de vezes depende do número de réplicas desejadas.
+- O comando abaixo deve ser feito em terminais diferentes, a quantidade de vezes depende do número de réplicas desejadas.
 
 **java -jar target/DistAlg.jar babel.address=IPx agreement_proto=(raft/multi-paxos) initial_membership=IP1:PORT1,IP2:PORT2,IPX:PORTX**
 
 ---
 
-exemplo:
+- Exemplo:
 
 *java -jar target/DistAlg.jar babel.address=127.0.0.1 agreement_proto=raft initial_membership=127.0.0.1:34000,127.0.0.1:34001,127.0.0.1:34002*
 
